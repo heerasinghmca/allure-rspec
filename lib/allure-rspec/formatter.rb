@@ -10,6 +10,11 @@ module AllureRSpec
                      :example_failed, :example_passed, :example_pending, :start, :stop]
     ALLOWED_LABELS = [:feature, :story, :severity, :language, :framework, :issue, :testId, :host, :thread]
 
+    def initialize(output)
+      super
+      @suite_name = nil
+    end
+
     def example_failed(notification)
       res = notification.example.execution_result
       status = res.exception.is_a?(RSpec::Expectations::ExpectationNotMetError) ? :failed : :broken
@@ -17,11 +22,13 @@ module AllureRSpec
     end
 
     def example_group_finished(notification)
-      AllureRubyAdaptorApi::Builder.stop_suite(description(notification.group).to_s)
+      AllureRubyAdaptorApi::Builder.stop_suite(@suite_name)
     end
 
     def example_group_started(notification)
-      AllureRubyAdaptorApi::Builder.start_suite(description(notification.group).to_s, labels(notification))
+      feature_identifier = ENV['FEATURE_IDENTIFIER'] && "#{ENV['FEATURE_IDENTIFIER']} - "
+      @suite_name = "#{feature_identifier}#{description(notification.group).to_s}"
+      AllureRubyAdaptorApi::Builder.start_suite(@suite_name, labels(notification))
     end
 
     def example_passed(notification)
@@ -33,9 +40,8 @@ module AllureRSpec
     end
 
     def example_started(notification)
-      suite = description(notification.example.example_group).to_s
       test = description(notification.example).to_s
-      AllureRubyAdaptorApi::Builder.start_test(suite, test, labels(notification))
+      AllureRubyAdaptorApi::Builder.start_test(@suite_name, test, labels(notification))
     end
 
     def start(example_count)
@@ -62,7 +68,7 @@ module AllureRSpec
     def stop_test(example, opts = {})
       res = example.execution_result
       AllureRubyAdaptorApi::Builder.stop_test(
-          description(example.example_group).to_s,
+          @suite_name,
           (example.metadata[:description_args].size== 0) ? description(example.example_group) : description(example).to_s,
           {
               :status => res.status,
@@ -73,9 +79,12 @@ module AllureRSpec
     end
 
     def metadata(example_or_group)
-      group?(example_or_group) ?
-          example_or_group.group.metadata :
-          example_or_group.example.metadata
+      if group?(example_or_group)
+        example_or_group.group.metadata
+      else
+        example_or_group.example.metadata[:example_group][:full_description] = @suite_name
+        example_or_group.example.metadata
+      end
     end
 
     def group?(example_or_group)
