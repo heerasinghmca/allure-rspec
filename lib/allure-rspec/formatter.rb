@@ -16,9 +16,18 @@ module AllureRSpec
     end
 
     def example_failed(notification)
-      res = notification.example.execution_result
-      status = res.exception.is_a?(RSpec::Expectations::ExpectationNotMetError) ? :failed : :broken
-      stop_test(notification.example, :exception => res.exception, :status => status)
+      begin
+        res = notification.example.execution_result
+        if res.exception.is_a?(RSpec::Expectations::MultipleExpectationsNotMetError)
+          puts "Got MultipleExpectationsNotMetError Exception"
+          raise res.exception, "#{res.exception.message}"
+        end
+        status = res.exception.is_a?(RSpec::Expectations::ExpectationNotMetError) ? :failed : :broken
+        stop_test(notification.example, :exception => res.exception, :status => status)
+      rescue RSpec::Expectations::MultipleExpectationsNotMetError => failure
+        puts "Catch MultipleExpectationsNotMetError Exception"
+        stop_test(notification.example, :exception => failure, :status => :failed)
+      end
     end
 
     def example_group_finished(notification)
